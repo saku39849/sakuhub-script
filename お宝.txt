@@ -1,0 +1,435 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local TELEPORT_KEY = Enum.KeyCode.T
+local BEAM_DURATION = 2.0
+
+local DEFAULT_HEIGHT_OFFSET = 3
+local KEYCARD_HEIGHT_OFFSET = 5.5
+
+local EXACT_DRAWER_NAME = "Meshes/DrawerValuables_Circle.005"
+
+local FALLBACK_ORDER = {
+	{ name = "Keycard", label = "Keycard", heightOffset = KEYCARD_HEIGHT_OFFSET },
+	{ name = "DoorCenter", label = "DoorCenter", heightOffset = DEFAULT_HEIGHT_OFFSET },
+}
+
+local function isValidTargetInstance(inst)
+	return inst
+		and inst.Parent ~= nil
+		and inst:IsDescendantOf(workspace)
+		and (inst:IsA("BasePart") or inst:IsA("Model") or inst:IsA("Attachment"))
+end
+
+-- 判明したパスを最速で直接取得し、無ければ補助検索する
+local function findDrawerValuables()
+	local mapObj = workspace:FindFirstChild("Map")
+	local stealable = mapObj and mapObj:FindFirstChild("StealableItems")
+	local gem = stealable and stealable:FindFirstChild("Gem")
+	local direct = gem and gem:FindFirstChild(EXACT_DRAWER_NAME)
+	if isValidTargetInstance(direct) then
+		return direct
+	end
+
+	-- 別の StealableItems 配下にある場合も軽く探す
+	if stealable then
+		for _, child in ipairs(stealable:GetDescendants()) do
+			if child.Name == EXACT_DRAWER_NAME and isValidTargetInstance(child) then
+				return child
+			end
+		end
+	end
+
+	-- 最終手段として workspace から検索
+	for _, desc in ipairs(workspace:GetDescendants()) do
+		if desc.Name == EXACT_DRAWER_NAME and isValidTargetInstance(desc) then
+			return desc
+		end
+	end
+
+	return nil
+end
+
+local function findTargetByName(targetName)
+	local mapObj = workspace:FindFirstChild("Map")
+	if mapObj then
+		for _, desc in ipairs(mapObj:GetDescendants()) do
+			if desc.Name == targetName and isValidTargetInstance(desc) then
+				return desc
+			end
+		end
+	end
+
+	for _, desc in ipairs(workspace:GetDescendants()) do
+		if desc.Name == targetName and isValidTargetInstance(desc) then
+			return desc
+		end
+	end
+	return nil
+end
+
+local function getTargetAnchorAndCFrame(target)
+	if not isValidTargetInstance(target) then
+		return nil, nil
+	end
+
+	if target:IsA("BasePart") then
+		return target, target.CFrame
+	elseif target:IsA("Model") then
+		local part = target.PrimaryPart or target:FindFirstChildWhichIsA("BasePart", true)
+		if part then
+			return part, part.CFrame
+		end
+	elseif target:IsA("Attachment") then
+		return target, target.WorldCFrame
+	end
+
+	return nil, nil
+end
+
+local function resolveCurrentTarget()
+	local drawer = findDrawerValuables()
+	if drawer then
+		return drawer, "DrawerValuables [最優先+ビーム]", true, DEFAULT_HEIGHT_OFFSET
+	end
+
+	for _, entry in ipairs(FALLBACK_ORDER) do
+		local found = findTargetByName(entry.name)
+		if found then
+			return found, entry.label, false, entry.heightOffset
+		end
+	end
+
+	return nil, "対象なし", false, DEFAULT_HEIGHT_OFFSET
+end
+
+-- 倒れ防止：位置を真っ直ぐ立ち姿勢にして速度・回転をリセット
+local function teleportUpright(character, hrp, position, lookVector)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.Sit = false
+		humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+	end
+
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
+
+	local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z)
+	if flatLook.Magnitude < 0.001 then
+		flatLook = Vector3.new(0, 0, -1)
+	else
+		flatLook = flatLook.Unit
+	end
+
+	local uprightCFrame = CFrame.lookAt(position, position + flatLook, Vector3.yAxis)
+	character:PivotTo(uprightCFrame)
+end
+
+-- ビーム演出
+local activeBeamCleanup = nil
+local function clearActiveBeam()
+	if activeBeamCleanup then
+		activeBeamCleanup()
+		activeBeamCleanup = nil
+	end
+end
+
+local function fireBeamToTarget(character, target)
+	clearActiveBeam()
+
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	local anchor, _ = getTargetAnchorAndCFrame(target)
+	if not hrp or not anchor then
+		return
+	end
+
+	local att0 = Instance.new("Attachment")
+	att0.Name = "DrawerTP_BeamAtt0"
+	att0.Parent = hrp
+
+	local att1 = Instance.new("Attachment")
+	att1.Name = "DrawerTP_BeamAtt1"
+
+	local tempPart = nil
+	if anchor:IsA("BasePart") then
+		att1.Parent = anchor
+	elseif anchor:IsA("Attachment") then
+		att1.WorldPosition = anchor.WorldPosition
+		att1.Parent = workspace.Terrain
+	else
+		tempPart = Instance.new("Part")
+		tempPart.Name = "DrawerTP_BeamAnchorPart"
+		tempPart.Size = Vector3.new(0.2, 0.2, 0.2)
+		tempPart.Transparency = 1
+		tempPart.Anchored = true
+		tempPart.CanCollide = false
+		tempPart.CFrame = target:GetPivot()
+		tempPart.Parent = workspace
+		att1.Parent = tempPart
+	end
+
+	local beam = Instance.new("Beam")
+	beam.Name = "DrawerValuables_Beam"
+	beam.Attachment0 = att0
+	beam.Attachment1 = att1
+	beam.Width0 = 0.45
+	beam.Width1 = 0.45
+	beam.FaceCamera = true
+	beam.LightEmission = 0.85
+	beam.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(56, 189, 248)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(250, 204, 21)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(248, 113, 113)),
+	})
+	beam.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.1),
+		NumberSequenceKeypoint.new(0.8, 0.2),
+		NumberSequenceKeypoint.new(1, 0.6),
+	})
+	beam.Parent = hrp
+
+	local cleaned = false
+	local function cleanup()
+		if cleaned then return end
+		cleaned = true
+		if beam then beam:Destroy() end
+		if att0 then att0:Destroy() end
+		if att1 then att1:Destroy() end
+		if tempPart then tempPart:Destroy() end
+	end
+
+	activeBeamCleanup = cleanup
+
+	local ancestryConn
+	ancestryConn = target.AncestryChanged:Connect(function(_, parent)
+		if not parent then
+			if ancestryConn then ancestryConn:Disconnect() end
+			cleanup()
+		end
+	end)
+
+	task.delay(BEAM_DURATION, function()
+		if ancestryConn then ancestryConn:Disconnect() end
+		cleanup()
+	end)
+end
+
+-- スマホ向けUI作成
+local playerGui = player:WaitForChild("PlayerGui")
+local oldGui = playerGui:FindFirstChild("PriorityBeamTP_MobileUI")
+if oldGui then
+	oldGui:Destroy()
+end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PriorityBeamTP_MobileUI"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.DisplayOrder = 999
+screenGui.Parent = playerGui
+
+local frame = Instance.new("Frame")
+frame.Name = "MobileFrame"
+frame.Size = UDim2.fromOffset(224, 96)
+frame.Position = UDim2.new(1, -238, 0, 64)
+frame.BackgroundColor3 = Color3.fromRGB(22, 24, 30)
+frame.BackgroundTransparency = 0.08
+frame.BorderSizePixel = 0
+frame.Parent = screenGui
+
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0, 14)
+frameCorner.Parent = frame
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(75, 85, 105)
+stroke.Thickness = 1.2
+stroke.Parent = frame
+
+local dragging = false
+local dragInput = nil
+local dragStart = Vector2.zero
+local startPos = frame.Position
+
+local function updateDrag(input)
+	local delta = input.Position - dragStart
+	frame.Position = UDim2.new(
+		startPos.X.Scale,
+		startPos.X.Offset + delta.X,
+		startPos.Y.Scale,
+		startPos.Y.Offset + delta.Y
+	)
+end
+
+frame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		startPos = frame.Position
+		dragInput = input
+
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+frame.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and input == dragInput then
+		updateDrag(input)
+	end
+end)
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -14, 0, 18)
+titleLabel.Position = UDim2.fromOffset(7, 6)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 11
+titleLabel.TextColor3 = Color3.fromRGB(235, 240, 250)
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
+titleLabel.Text = "次: タップ時に判定"
+titleLabel.Parent = frame
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -14, 0, 14)
+statusLabel.Position = UDim2.fromOffset(7, 22)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.TextSize = 10
+statusLabel.TextColor3 = Color3.fromRGB(165, 175, 195)
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.Text = "タップでTP（移動可・高速）"
+statusLabel.Parent = frame
+
+local tpButton = Instance.new("TextButton")
+tpButton.Name = "TeleportButton"
+tpButton.Size = UDim2.new(1, -14, 0, 42)
+tpButton.Position = UDim2.fromOffset(7, 42)
+tpButton.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
+tpButton.BorderSizePixel = 0
+tpButton.Font = Enum.Font.GothamBold
+tpButton.TextSize = 13
+tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+tpButton.Text = "TP する"
+tpButton.AutoButtonColor = false
+tpButton.Parent = frame
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 10)
+btnCorner.Parent = tpButton
+
+local function setStatus(text, color)
+	statusLabel.Text = text
+	statusLabel.TextColor3 = color or Color3.fromRGB(165, 175, 195)
+end
+
+local function updateTargetUI(target, labelText, isDrawer)
+	if target then
+		titleLabel.Text = "対象: " .. labelText
+	else
+		titleLabel.Text = "対象: " .. labelText
+	end
+
+	if isDrawer then
+		titleLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+		stroke.Color = Color3.fromRGB(250, 204, 21)
+	else
+		titleLabel.TextColor3 = Color3.fromRGB(235, 240, 250)
+		stroke.Color = Color3.fromRGB(75, 85, 105)
+	end
+end
+
+local isTeleporting = false
+local function executeTeleport()
+	if isTeleporting then return end
+	isTeleporting = true
+
+	local ok, err = pcall(function()
+		local character = player.Character or player.CharacterAdded:Wait()
+		local hrp = character:FindFirstChild("HumanoidRootPart")
+		if not hrp then
+			setStatus("キャラ未準備", Color3.fromRGB(248, 113, 113))
+			return
+		end
+
+		local target, labelText, isDrawer, heightOffset = resolveCurrentTarget()
+		updateTargetUI(target, labelText, isDrawer)
+
+		if not target then
+			clearActiveBeam()
+			setStatus("対象が見つかりません", Color3.fromRGB(248, 113, 113))
+			return
+		end
+
+		local _, targetCFrame = getTargetAnchorAndCFrame(target)
+		if not targetCFrame then
+			setStatus("座標取得失敗: " .. labelText, Color3.fromRGB(248, 113, 113))
+			return
+		end
+
+		local destinationPos = targetCFrame.Position + Vector3.new(0, heightOffset, 0)
+		teleportUpright(character, hrp, destinationPos, hrp.CFrame.LookVector)
+
+		if isDrawer then
+			fireBeamToTarget(character, target)
+			setStatus("最優先TP + ビーム照射！", Color3.fromRGB(250, 204, 21))
+		else
+			clearActiveBeam()
+			setStatus("TP完了 → " .. labelText, Color3.fromRGB(74, 222, 128))
+		end
+	end)
+
+	if not ok then
+		warn("[TP] エラー:", err)
+		setStatus("エラー発生", Color3.fromRGB(248, 113, 113))
+	end
+
+	task.delay(1.5, function()
+		if statusLabel and statusLabel.Parent then
+			setStatus("タップでTP（移動可・高速）", Color3.fromRGB(165, 175, 195))
+		end
+	end)
+
+	isTeleporting = false
+end
+
+tpButton.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+		TweenService:Create(tpButton, TweenInfo.new(0.08), {
+			BackgroundColor3 = Color3.fromRGB(37, 99, 235),
+			Size = UDim2.new(1, -18, 0, 40)
+		}):Play()
+	end
+end)
+
+tpButton.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+		TweenService:Create(tpButton, TweenInfo.new(0.08), {
+			BackgroundColor3 = Color3.fromRGB(59, 130, 246),
+			Size = UDim2.new(1, -14, 0, 42)
+		}):Play()
+	end
+end)
+
+tpButton.Activated:Connect(function()
+	executeTeleport()
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == TELEPORT_KEY then
+		executeTeleport()
+	end
+end)
