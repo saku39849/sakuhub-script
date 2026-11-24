@@ -1,1 +1,1897 @@
-loadstring(game:HttpGet("https://api.nn-nanox.com/r/Rx93YU52aFdp.lua"))()
+<!DOCTYPE html>
+
+<html lang="ja">
+
+<head>
+
+  <meta charset="UTF-8" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>コネクト4 練習＆ガチAI対戦</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Noto+Sans+JP:wght@400;600;700;900&display=swap" rel="stylesheet" />
+
+  <style>
+
+    :root {
+
+      --bg-dark: #0f172a;
+
+      --panel-bg: #1e293b;
+
+      --board-blue: #1d4ed8;
+
+      --board-blue-dark: #1e3a8a;
+
+      --board-rim: #60a5fa;
+
+      --slot-hole: #090d16;
+
+      --red-disc: #ef4444;
+
+      --red-disc-dark: #991b1b;
+
+      --yellow-disc: #facc15;
+
+      --yellow-disc-dark: #a16207;
+
+    }
+
+
+
+    * {
+
+      box-sizing: border-box;
+
+      -webkit-tap-highlight-color: transparent;
+
+    }
+
+
+
+    body {
+
+      font-family: 'Noto Sans JP', 'Inter', sans-serif;
+
+      background: radial-gradient(circle at top, #1e293b 0%, #0f172a 60%, #060a14 100%);
+
+      color: #f8fafc;
+
+      min-height: 100vh;
+
+      margin: 0;
+
+      overflow-x: hidden;
+
+    }
+
+
+
+    /* コマの落下アニメーション */
+
+    @keyframes dropDisc {
+
+      0% {
+
+        transform: translateY(var(--drop-start, -420px)) scale(0.96);
+
+        opacity: 0.9;
+
+      }
+
+      72% {
+
+        transform: translateY(0px) scale(1);
+
+        opacity: 1;
+
+      }
+
+      86% {
+
+        transform: translateY(-10px) scale(1.02, 0.96);
+
+      }
+
+      100% {
+
+        transform: translateY(0px) scale(1);
+
+        opacity: 1;
+
+      }
+
+    }
+
+
+
+    /* 勝利ラインのパルス強調 */
+
+    @keyframes winPulse {
+
+      0%, 100% {
+
+        transform: scale(1);
+
+        box-shadow: 0 0 0 3px #ffffff, 0 0 18px rgba(255, 255, 255, 0.9);
+
+      }
+
+      50% {
+
+        transform: scale(1.08);
+
+        box-shadow: 0 0 0 4px #ffffff, 0 0 28px rgba(255, 255, 255, 1);
+
+      }
+
+    }
+
+
+
+    .disc-drop {
+
+      animation: dropDisc 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+
+    }
+
+
+
+    .disc-win {
+
+      animation: winPulse 0.95s ease-in-out infinite;
+
+      z-index: 20;
+
+    }
+
+
+
+    .disc-red {
+
+      background: radial-gradient(circle at 32% 28%, #ff8a8a 0%, var(--red-disc) 48%, var(--red-disc-dark) 100%);
+
+      box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.45), inset 0 3px 5px rgba(255, 255, 255, 0.45), 0 4px 10px rgba(0, 0, 0, 0.45);
+
+    }
+
+
+
+    .disc-yellow {
+
+      background: radial-gradient(circle at 32% 28%, #fef08a 0%, var(--yellow-disc) 50%, var(--yellow-disc-dark) 100%);
+
+      box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.4), inset 0 3px 5px rgba(255, 255, 255, 0.55), 0 4px 10px rgba(0, 0, 0, 0.45);
+
+    }
+
+
+
+    .board-frame {
+
+      background: linear-gradient(160deg, #2563eb 0%, var(--board-blue) 55%, var(--board-blue-dark) 100%);
+
+      border: 3px solid var(--board-rim);
+
+      box-shadow:
+
+        0 20px 45px rgba(0, 0, 0, 0.65),
+
+        inset 0 2px 6px rgba(255, 255, 255, 0.25),
+
+        inset 0 -6px 14px rgba(15, 23, 42, 0.55);
+
+    }
+
+
+
+    .slot-empty {
+
+      background: radial-gradient(circle at 50% 35%, #050811 0%, var(--slot-hole) 75%, #172554 100%);
+
+      box-shadow: inset 0 4px 9px rgba(0, 0, 0, 0.85), 0 1px 1px rgba(255, 255, 255, 0.14);
+
+    }
+
+
+
+    .col-hover-highlight {
+
+      background: rgba(255, 255, 255, 0.08);
+
+    }
+
+  </style>
+
+</head>
+
+<body class="flex flex-col items-center justify-between px-3 py-4 sm:px-6 sm:py-6">
+
+  <!-- ヘッダー＆モード切替 -->
+
+  <header class="w-full max-w-3xl flex flex-col gap-3">
+
+    <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-800/80 border border-slate-700/80 rounded-2xl px-4 py-3 backdrop-blur">
+
+      <div>
+
+        <h1 class="text-lg sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
+
+          <span>CONNECT 4</span>
+
+          <span class="text-xs sm:text-sm font-bold px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40">
+
+            ガチAI搭載
+
+          </span>
+
+        </h1>
+
+        <p class="text-xs sm:text-sm text-slate-300 mt-0.5">
+
+          縦・横・斜めのいずれかに4つ並べた方が勝利（7列×6段）
+
+        </p>
+
+      </div>
+
+
+
+      <!-- モード切替ボタン -->
+
+      <div class="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-700">
+
+        <button
+
+          id="modeAiBtn"
+
+          type="button"
+
+          class="px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition cursor-pointer bg-blue-600 text-white shadow"
+
+        >
+
+          1人用（vs ガチAI）
+
+        </button>
+
+        <button
+
+          id="mode2pBtn"
+
+          type="button"
+
+          class="px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition cursor-pointer text-slate-300 hover:text-white"
+
+        >
+
+          2人対戦
+
+        </button>
+
+      </div>
+
+    </div>
+
+
+
+    <!-- プレイヤー情報＆スコアボード -->
+
+    <div class="grid grid-cols-3 gap-2 sm:gap-3 items-stretch">
+
+      <!-- プレイヤー1 (YOU / 赤) -->
+
+      <div
+
+        id="p1Card"
+
+        class="flex flex-col items-center justify-center rounded-2xl px-2 py-2.5 sm:px-4 sm:py-3 bg-slate-800/80 border-2 border-red-500/80 transition"
+
+      >
+
+        <div class="flex items-center gap-2">
+
+          <span class="w-5 h-5 sm:w-6 sm:h-6 rounded-full disc-red inline-block shrink-0"></span>
+
+          <span id="p1Label" class="font-extrabold text-xs sm:text-base text-white truncate">YOU</span>
+
+        </div>
+
+        <span class="text-[11px] sm:text-xs text-slate-400 mt-0.5">先攻・赤</span>
+
+        <span id="p1Score" class="text-lg sm:text-2xl font-black text-red-400 mt-0.5">0</span>
+
+      </div>
+
+
+
+      <!-- 中央：ターン＆ステータス表示 -->
+
+      <div class="flex flex-col items-center justify-center rounded-2xl px-2 py-2.5 sm:px-4 sm:py-3 bg-slate-900/90 border border-slate-700 text-center">
+
+        <span id="statusBadge" class="text-[11px] sm:text-xs font-bold px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40">
+
+          あなたの番
+
+        </span>
+
+        <p id="statusText" class="text-xs sm:text-sm font-bold text-white mt-1.5 leading-snug">
+
+          列をクリックして落下
+
+        </p>
+
+        <span id="drawScore" class="text-[11px] text-slate-400 mt-1">引き分け: 0</span>
+
+      </div>
+
+
+
+      <!-- プレイヤー2 (AI / 黄) -->
+
+      <div
+
+        id="p2Card"
+
+        class="flex flex-col items-center justify-center rounded-2xl px-2 py-2.5 sm:px-4 sm:py-3 bg-slate-800/80 border-2 border-transparent transition"
+
+      >
+
+        <div class="flex items-center gap-2">
+
+          <span class="w-5 h-5 sm:w-6 sm:h-6 rounded-full disc-yellow inline-block shrink-0"></span>
+
+          <span id="p2Label" class="font-extrabold text-xs sm:text-base text-white truncate">ガチAI</span>
+
+        </div>
+
+        <span id="p2SubLabel" class="text-[11px] sm:text-xs text-amber-300/90 mt-0.5">後攻・黄（無敗設定）</span>
+
+        <span id="p2Score" class="text-lg sm:text-2xl font-black text-yellow-400 mt-0.5">0</span>
+
+      </div>
+
+    </div>
+
+  </header>
+
+
+
+  <!-- メイン盤面エリア -->
+
+  <main class="w-full max-w-xl my-3 sm:my-4 flex flex-col items-center">
+
+    <!-- 上部ドロッププレビュー（PC・タブレット向け） -->
+
+    <div
+
+      id="previewRow"
+
+      class="w-full grid grid-cols-7 gap-1.5 sm:gap-2.5 px-2.5 sm:px-4 mb-1.5"
+
+      aria-hidden="true"
+
+    >
+
+      <!-- JSで7個のプレビュー枠を生成 -->
+
+    </div>
+
+
+
+    <!-- 7x6 コネクト4 盤面 -->
+
+    <div class="w-full board-frame rounded-3xl p-2.5 sm:p-4 relative select-none">
+
+      <div
+
+        id="boardGrid"
+
+        class="w-full grid grid-cols-7 grid-rows-6 gap-1.5 sm:gap-2.5 aspect-[7/6]"
+
+        role="grid"
+
+        aria-label="コネクト4盤面"
+
+      >
+
+        <!-- JSで42セルを生成 -->
+
+      </div>
+
+    </div>
+
+
+
+    <!-- モバイル・タッチ向け 1〜7 列タップボタン -->
+
+    <div class="w-full mt-3">
+
+      <div class="text-center text-[11px] text-slate-400 mb-1.5">
+
+        盤面タップ または 下の列ボタン（キーボード 1〜7 でも操作可）
+
+      </div>
+
+      <div id="colButtons" class="grid grid-cols-7 gap-1.5 sm:gap-2.5">
+
+        <!-- JSで1〜7ボタンを生成 -->
+
+      </div>
+
+    </div>
+
+  </main>
+
+
+
+  <!-- フッター：操作ボタン＆メッセージ -->
+
+  <footer class="w-full max-w-xl flex flex-col items-center gap-2.5">
+
+    <div id="messageBox" class="hidden w-full rounded-xl px-4 py-2.5 text-center text-xs sm:text-sm font-bold border">
+
+      <!-- 勝敗・通知メッセージ -->
+
+    </div>
+
+
+
+    <div class="flex flex-wrap items-center justify-center gap-2.5 w-full">
+
+      <button
+
+        id="restartBtn"
+
+        type="button"
+
+        class="flex-1 min-w-[140px] px-4 py-3 rounded-xl font-extrabold text-sm bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 active:scale-[0.99] text-white shadow-lg shadow-emerald-950/60 transition cursor-pointer"
+
+      >
+
+        次のラウンド / リセット
+
+      </button>
+
+
+
+      <button
+
+        id="swapStarterBtn"
+
+        type="button"
+
+        class="px-4 py-3 rounded-xl font-bold text-xs sm:text-sm bg-slate-800 hover:bg-slate-700 active:scale-[0.99] text-slate-200 border border-slate-600 transition cursor-pointer"
+
+      >
+
+        先攻/後攻を入れ替え
+
+      </button>
+
+
+
+      <button
+
+        id="resetScoreBtn"
+
+        type="button"
+
+        class="px-4 py-3 rounded-xl font-bold text-xs sm:text-sm bg-slate-800/70 hover:bg-slate-700 active:scale-[0.99] text-slate-300 border border-slate-700 transition cursor-pointer"
+
+      >
+
+        スコア初期化
+
+      </button>
+
+    </div>
+
+  </footer>
+
+
+
+  <script>
+
+    (function () {
+
+      'use strict';
+
+
+
+      // ==========================================
+
+      // 定数・ゲーム状態
+
+      // ==========================================
+
+      const ROWS = 6;
+
+      const COLS = 7;
+
+      const EMPTY = 0;
+
+      const RED = 1;    // プレイヤー1 (YOU)
+
+      const YELLOW = 2; // プレイヤー2 (AI または 2P)
+
+
+
+      // 探索順序：中央（3列目＝0始まりで3）を最優先して枝刈り効率＆戦略性を高める
+
+      const COL_ORDER = [3, 2, 4, 1, 5, 0, 6];
+
+
+
+      let board = createEmptyBoard();
+
+      let gameMode = 'ai'; // 'ai' | '2p'
+
+      let startingPlayer = RED;
+
+      let currentPlayer = RED;
+
+      let gameOver = false;
+
+      let isAiThinking = false;
+
+      let hoveredCol = null;
+
+      let winningCells = []; // [{ row, col }, ...]
+
+
+
+      const scores = {
+
+        [RED]: 0,
+
+        [YELLOW]: 0,
+
+        draw: 0
+
+      };
+
+
+
+      // DOM参照
+
+      const boardGrid = document.getElementById('boardGrid');
+
+      const previewRow = document.getElementById('previewRow');
+
+      const colButtons = document.getElementById('colButtons');
+
+      const modeAiBtn = document.getElementById('modeAiBtn');
+
+      const mode2pBtn = document.getElementById('mode2pBtn');
+
+      const p1Card = document.getElementById('p1Card');
+
+      const p2Card = document.getElementById('p2Card');
+
+      const p1Label = document.getElementById('p1Label');
+
+      const p2Label = document.getElementById('p2Label');
+
+      const p2SubLabel = document.getElementById('p2SubLabel');
+
+      const p1ScoreEl = document.getElementById('p1Score');
+
+      const p2ScoreEl = document.getElementById('p2Score');
+
+      const drawScoreEl = document.getElementById('drawScore');
+
+      const statusBadge = document.getElementById('statusBadge');
+
+      const statusText = document.getElementById('statusText');
+
+      const messageBox = document.getElementById('messageBox');
+
+      const restartBtn = document.getElementById('restartBtn');
+
+      const swapStarterBtn = document.getElementById('swapStarterBtn');
+
+      const resetScoreBtn = document.getElementById('resetScoreBtn');
+
+
+
+      // ==========================================
+
+      // 盤面操作ヘルパー
+
+      // ==========================================
+
+      function createEmptyBoard() {
+
+        return Array.from({ length: ROWS }, () => Array(COLS).fill(EMPTY));
+
+      }
+
+
+
+      function cloneBoard(b) {
+
+        return b.map(row => row.slice());
+
+      }
+
+
+
+      /**
+
+       * 指定列でコマが落ちる最下段の行番号を返す。満杯なら -1。
+
+       */
+
+      function getAvailableRow(b, col) {
+
+        if (col < 0 || col >= COLS) return -1;
+
+        for (let r = ROWS - 1; r >= 0; r--) {
+
+          if (b[r][col] === EMPTY) return r;
+
+        }
+
+        return -1;
+
+      }
+
+
+
+      function getValidCols(b) {
+
+        const valid = [];
+
+        for (const c of COL_ORDER) {
+
+          if (getAvailableRow(b, c) !== -1) valid.push(c);
+
+        }
+
+        return valid;
+
+      }
+
+
+
+      function isBoardFull(b) {
+
+        for (let c = 0; c < COLS; c++) {
+
+          if (b[0][c] === EMPTY) return false;
+
+        }
+
+        return true;
+
+      }
+
+
+
+      /**
+
+       * 勝利判定：4つ並んでいる場合は { winner, line } を返し、なければ null。
+
+       */
+
+      function checkWin(b) {
+
+        const directions = [
+
+          { dr: 0, dc: 1 },  // 横
+
+          { dr: 1, dc: 0 },  // 縦
+
+          { dr: 1, dc: 1 },  // 斜め右下
+
+          { dr: 1, dc: -1 }  // 斜め左下
+
+        ];
+
+
+
+        for (let r = 0; r < ROWS; r++) {
+
+          for (let c = 0; c < COLS; c++) {
+
+            const player = b[r][c];
+
+            if (player === EMPTY) continue;
+
+
+
+            for (const { dr, dc } of directions) {
+
+              const line = [{ row: r, col: c }];
+
+              let nr = r + dr;
+
+              let nc = c + dc;
+
+              while (
+
+                nr >= 0 &&
+
+                nr < ROWS &&
+
+                nc >= 0 &&
+
+                nc < COLS &&
+
+                b[nr][nc] === player
+
+              ) {
+
+                line.push({ row: nr, col: nc });
+
+                if (line.length === 4) {
+
+                  return { winner: player, line };
+
+                }
+
+                nr += dr;
+
+                nc += dc;
+
+              }
+
+            }
+
+          }
+
+        }
+
+        return null;
+
+      }
+
+
+
+      // ==========================================
+
+      // ガチAI（Minimax + αβ枝刈り + 評価関数）
+
+      // ==========================================
+
+      /**
+
+       * 4マスのウィンドウを評価する。
+
+       * AI (YELLOW) に有利なほどプラス、相手 (RED) に有利なほどマイナス。
+
+       */
+
+      function evaluateWindow(windowCells, aiPlayer) {
+
+        const oppPlayer = aiPlayer === YELLOW ? RED : YELLOW;
+
+        let aiCount = 0;
+
+        let oppCount = 0;
+
+        let emptyCount = 0;
+
+
+
+        for (const cell of windowCells) {
+
+          if (cell === aiPlayer) aiCount++;
+
+          else if (cell === oppPlayer) oppCount++;
+
+          else emptyCount++;
+
+        }
+
+
+
+        // 両者のコマが混在しているラインは4並びにならない
+
+        if (aiCount > 0 && oppCount > 0) return 0;
+
+
+
+        if (aiCount === 4) return 100000;
+
+        if (oppCount === 4) return -100000;
+
+
+
+        if (aiCount === 3 && emptyCount === 1) return 140;
+
+        if (aiCount === 2 && emptyCount === 2) return 18;
+
+
+
+        // 相手のリーチ（3並び＋空き1）は最優先で潰すため重みを大きく設定
+
+        if (oppCount === 3 && emptyCount === 1) return -220;
+
+        if (oppCount === 2 && emptyCount === 2) return -16;
+
+
+
+        return 0;
+
+      }
+
+
+
+      /**
+
+       * 盤面全体の静的評価値を計算する。
+
+       */
+
+      function scorePosition(b, aiPlayer) {
+
+        let score = 0;
+
+
+
+        // 1. 中央列（col 3）の支配ボーナス
+
+        const centerCol = Math.floor(COLS / 2);
+
+        let centerCount = 0;
+
+        for (let r = 0; r < ROWS; r++) {
+
+          if (b[r][centerCol] === aiPlayer) centerCount++;
+
+        }
+
+        score += centerCount * 24;
+
+
+
+        // 中央付近（col 2, 4）も少し加点
+
+        for (let r = 0; r < ROWS; r++) {
+
+          if (b[r][2] === aiPlayer) score += 8;
+
+          if (b[r][4] === aiPlayer) score += 8;
+
+        }
+
+
+
+        // 2. 横方向ウィンドウ
+
+        for (let r = 0; r < ROWS; r++) {
+
+          for (let c = 0; c <= COLS - 4; c++) {
+
+            const win = [b[r][c], b[r][c + 1], b[r][c + 2], b[r][c + 3]];
+
+            score += evaluateWindow(win, aiPlayer);
+
+          }
+
+        }
+
+
+
+        // 3. 縦方向ウィンドウ
+
+        for (let c = 0; c < COLS; c++) {
+
+          for (let r = 0; r <= ROWS - 4; r++) {
+
+            const win = [b[r][c], b[r + 1][c], b[r + 2][c], b[r + 3][c]];
+
+            score += evaluateWindow(win, aiPlayer);
+
+          }
+
+        }
+
+
+
+        // 4. 斜め（右下）ウィンドウ
+
+        for (let r = 0; r <= ROWS - 4; r++) {
+
+          for (let c = 0; c <= COLS - 4; c++) {
+
+            const win = [b[r][c], b[r + 1][c + 1], b[r + 2][c + 2], b[r + 3][c + 3]];
+
+            score += evaluateWindow(win, aiPlayer);
+
+          }
+
+        }
+
+
+
+        // 5. 斜め（左下）ウィンドウ
+
+        for (let r = 0; r <= ROWS - 4; r++) {
+
+          for (let c = 3; c < COLS; c++) {
+
+            const win = [b[r][c], b[r + 1][c - 1], b[r + 2][c - 2], b[r + 3][c - 3]];
+
+            score += evaluateWindow(win, aiPlayer);
+
+          }
+
+        }
+
+
+
+        return score;
+
+      }
+
+
+
+      /**
+
+       * アルファベータ枝刈り付き Minimax
+
+       */
+
+      function minimax(b, depth, alpha, beta, maximizingPlayer, aiPlayer) {
+
+        const oppPlayer = aiPlayer === YELLOW ? RED : YELLOW;
+
+        const validCols = getValidCols(b);
+
+        const winResult = checkWin(b);
+
+
+
+        if (winResult) {
+
+          if (winResult.winner === aiPlayer) {
+
+            return { col: null, score: 10000000 + depth * 1000 };
+
+          } else {
+
+            return { col: null, score: -10000000 - depth * 1000 };
+
+          }
+
+        }
+
+
+
+        if (validCols.length === 0) {
+
+          return { col: null, score: 0 };
+
+        }
+
+
+
+        if (depth === 0) {
+
+          return { col: null, score: scorePosition(b, aiPlayer) };
+
+        }
+
+
+
+        if (maximizingPlayer) {
+
+          let value = -Infinity;
+
+          let bestCol = validCols[0];
+
+
+
+          for (const col of validCols) {
+
+            const row = getAvailableRow(b, col);
+
+            b[row][col] = aiPlayer;
+
+            const res = minimax(b, depth - 1, alpha, beta, false, aiPlayer);
+
+            b[row][col] = EMPTY;
+
+
+
+            if (res.score > value) {
+
+              value = res.score;
+
+              bestCol = col;
+
+            }
+
+            alpha = Math.max(alpha, value);
+
+            if (alpha >= beta) break;
+
+          }
+
+          return { col: bestCol, score: value };
+
+        } else {
+
+          let value = Infinity;
+
+          let bestCol = validCols[0];
+
+
+
+          for (const col of validCols) {
+
+            const row = getAvailableRow(b, col);
+
+            b[row][col] = oppPlayer;
+
+            const res = minimax(b, depth - 1, alpha, beta, true, aiPlayer);
+
+            b[row][col] = EMPTY;
+
+
+
+            if (res.score < value) {
+
+              value = res.score;
+
+              bestCol = col;
+
+            }
+
+            beta = Math.min(beta, value);
+
+            if (alpha >= beta) break;
+
+          }
+
+          return { col: bestCol, score: value };
+
+        }
+
+      }
+
+
+
+      /**
+
+       * AIの最善手を決定する。
+
+       * 1) 即勝ちがあれば即選択
+
+       * 2) 相手の即勝ちがあれば即ブロック
+
+       * 3) 残り空きマス数に応じて探索深さを動的調整（終盤は完全読み切りに近づける）
+
+       */
+
+      function chooseBestAiMove(b, aiPlayer = YELLOW) {
+
+        const oppPlayer = aiPlayer === YELLOW ? RED : YELLOW;
+
+        const validCols = getValidCols(b);
+
+        if (validCols.length === 0) return null;
+
+
+
+        // 1. 即勝ちチェック
+
+        for (const col of validCols) {
+
+          const r = getAvailableRow(b, col);
+
+          b[r][col] = aiPlayer;
+
+          const win = checkWin(b);
+
+          b[r][col] = EMPTY;
+
+          if (win && win.winner === aiPlayer) {
+
+            return col;
+
+          }
+
+        }
+
+
+
+        // 2. 相手の即勝ちブロックチェック
+
+        for (const col of validCols) {
+
+          const r = getAvailableRow(b, col);
+
+          b[r][col] = oppPlayer;
+
+          const win = checkWin(b);
+
+          b[r][col] = EMPTY;
+
+          if (win && win.winner === oppPlayer) {
+
+            return col;
+
+          }
+
+        }
+
+
+
+        // 盤面が完全空なら中央（3）を確定選択
+
+        let filledCount = 0;
+
+        for (let r = 0; r < ROWS; r++) {
+
+          for (let c = 0; c < COLS; c++) {
+
+            if (b[r][c] !== EMPTY) filledCount++;
+
+          }
+
+        }
+
+        if (filledCount === 0) return 3;
+
+
+
+        // 残りマス数に応じて深さを調整（通常7手先、終盤は9〜11手先）
+
+        const emptyCount = ROWS * COLS - filledCount;
+
+        let depth = 7;
+
+        if (emptyCount <= 12) depth = 10;
+
+        else if (emptyCount <= 18) depth = 8;
+
+
+
+        const simBoard = cloneBoard(b);
+
+        const { col } = minimax(simBoard, depth, -Infinity, Infinity, true, aiPlayer);
+
+        return col !== null ? col : validCols[0];
+
+      }
+
+
+
+      // ==========================================
+
+      // UI構築・描画
+
+      // ==========================================
+
+      function initGridDOM() {
+
+        previewRow.innerHTML = '';
+
+        colButtons.innerHTML = '';
+
+        boardGrid.innerHTML = '';
+
+
+
+        for (let c = 0; c < COLS; c++) {
+
+          // プレビューセル
+
+          const prevCell = document.createElement('div');
+
+          prevCell.className = 'flex items-center justify-center h-7 sm:h-9';
+
+          prevCell.dataset.col = String(c);
+
+          const prevDisc = document.createElement('div');
+
+          prevDisc.id = `previewDisc-${c}`;
+
+          prevDisc.className = 'w-6 h-6 sm:w-8 sm:h-8 rounded-full opacity-0 transition-opacity duration-150';
+
+          prevCell.appendChild(prevDisc);
+
+          previewRow.appendChild(prevCell);
+
+
+
+          // モバイル・キーボード補助用の列ボタン（1〜7）
+
+          const btn = document.createElement('button');
+
+          btn.type = 'button';
+
+          btn.id = `colBtn-${c}`;
+
+          btn.textContent = String(c + 1);
+
+          btn.setAttribute('aria-label', `${c + 1}列目にコマを落とす`);
+
+          btn.className =
+
+            'py-2 sm:py-2.5 rounded-xl font-black text-xs sm:text-sm bg-slate-800 hover:bg-blue-600 active:scale-95 text-slate-200 hover:text-white border border-slate-700 transition cursor-pointer disabled:opacity-35 disabled:pointer-events-none';
+
+          btn.addEventListener('click', () => handleHumanMove(c));
+
+          btn.addEventListener('mouseenter', () => setHoveredCol(c));
+
+          btn.addEventListener('mouseleave', () => setHoveredCol(null));
+
+          colButtons.appendChild(btn);
+
+        }
+
+
+
+        for (let r = 0; r < ROWS; r++) {
+
+          for (let c = 0; c < COLS; c++) {
+
+            const cell = document.createElement('div');
+
+            cell.id = `cell-${r}-${c}`;
+
+            cell.dataset.row = String(r);
+
+            cell.dataset.col = String(c);
+
+            cell.className =
+
+              'relative w-full h-full rounded-full slot-empty flex items-center justify-center cursor-pointer transition-colors duration-150';
+
+            cell.addEventListener('click', () => handleHumanMove(c));
+
+            cell.addEventListener('mouseenter', () => setHoveredCol(c));
+
+            cell.addEventListener('mouseleave', () => setHoveredCol(null));
+
+            boardGrid.appendChild(cell);
+
+          }
+
+        }
+
+      }
+
+
+
+      function setHoveredCol(col) {
+
+        hoveredCol = col;
+
+        renderPreview();
+
+        renderColumnHighlights();
+
+      }
+
+
+
+      function renderColumnHighlights() {
+
+        for (let r = 0; r < ROWS; r++) {
+
+          for (let c = 0; c < COLS; c++) {
+
+            const cell = document.getElementById(`cell-${r}-${c}`);
+
+            if (!cell) continue;
+
+            if (hoveredCol === c && !gameOver && !isAiThinking && getAvailableRow(board, c) !== -1) {
+
+              cell.classList.add('col-hover-highlight');
+
+            } else {
+
+              cell.classList.remove('col-hover-highlight');
+
+            }
+
+          }
+
+        }
+
+      }
+
+
+
+      function renderPreview() {
+
+        for (let c = 0; c < COLS; c++) {
+
+          const disc = document.getElementById(`previewDisc-${c}`);
+
+          if (!disc) continue;
+
+          disc.classList.remove('disc-red', 'disc-yellow');
+
+
+
+          const canShow =
+
+            hoveredCol === c &&
+
+            !gameOver &&
+
+            !isAiThinking &&
+
+            getAvailableRow(board, c) !== -1 &&
+
+            (gameMode === '2p' || currentPlayer === RED);
+
+
+
+          if (canShow) {
+
+            disc.classList.add(currentPlayer === RED ? 'disc-red' : 'disc-yellow');
+
+            disc.style.opacity = '0.9';
+
+          } else {
+
+            disc.style.opacity = '0';
+
+          }
+
+        }
+
+      }
+
+
+
+      /**
+
+       * 盤面とコマを描画する。newlyPlaced が渡された場合、そのコマに落下アニメを付与する。
+
+       */
+
+      function renderBoard(newlyPlaced = null) {
+
+        for (let r = 0; r < ROWS; r++) {
+
+          for (let c = 0; c < COLS; c++) {
+
+            const cell = document.getElementById(`cell-${r}-${c}`);
+
+            const value = board[r][c];
+
+            cell.innerHTML = '';
+
+
+
+            if (value !== EMPTY) {
+
+              const disc = document.createElement('div');
+
+              disc.className = `w-[88%] h-[88%] rounded-full ${value === RED ? 'disc-red' : 'disc-yellow'}`;
+
+
+
+              const isWinning = winningCells.some(pt => pt.row === r && pt.col === c);
+
+              if (isWinning) {
+
+                disc.classList.add('disc-win');
+
+              }
+
+
+
+              if (newlyPlaced && newlyPlaced.row === r && newlyPlaced.col === c) {
+
+                const dropDistance = -((r + 1) * 72 + 30);
+
+                disc.style.setProperty('--drop-start', `${dropDistance}px`);
+
+                disc.classList.add('disc-drop');
+
+              }
+
+
+
+              cell.appendChild(disc);
+
+            }
+
+          }
+
+        }
+
+
+
+        // 列ボタンの有効/無効更新
+
+        for (let c = 0; c < COLS; c++) {
+
+          const btn = document.getElementById(`colBtn-${c}`);
+
+          const disabled =
+
+            gameOver ||
+
+            isAiThinking ||
+
+            getAvailableRow(board, c) === -1 ||
+
+            (gameMode === 'ai' && currentPlayer !== RED);
+
+          btn.disabled = disabled;
+
+        }
+
+
+
+        renderPreview();
+
+        renderColumnHighlights();
+
+      }
+
+
+
+      function updateStatusUI() {
+
+        p1ScoreEl.textContent = String(scores[RED]);
+
+        p2ScoreEl.textContent = String(scores[YELLOW]);
+
+        drawScoreEl.textContent = `引き分け: ${scores.draw}`;
+
+
+
+        if (gameMode === 'ai') {
+
+          p1Label.textContent = 'YOU';
+
+          p2Label.textContent = 'ガチAI';
+
+          p2SubLabel.textContent = '後攻/先攻・黄（無敗設定）';
+
+        } else {
+
+          p1Label.textContent = 'P1（赤）';
+
+          p2Label.textContent = 'P2（黄）';
+
+          p2SubLabel.textContent = 'ローカル2人対戦';
+
+        }
+
+
+
+        p1Card.classList.toggle('border-red-500', !gameOver && currentPlayer === RED);
+
+        p1Card.classList.toggle('border-transparent', gameOver || currentPlayer !== RED);
+
+
+
+        p2Card.classList.toggle('border-yellow-400', !gameOver && currentPlayer === YELLOW);
+
+        p2Card.classList.toggle('border-transparent', gameOver || currentPlayer !== YELLOW);
+
+
+
+        if (gameOver) {
+
+          statusBadge.className = 'text-[11px] sm:text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+
+          statusBadge.textContent = 'ゲーム終了';
+
+          statusText.textContent = '次のラウンドへ進めます';
+
+          return;
+
+        }
+
+
+
+        if (isAiThinking) {
+
+          statusBadge.className = 'text-[11px] sm:text-xs font-bold px-2.5 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 border border-yellow-400/40';
+
+          statusBadge.textContent = 'AI思考中...';
+
+          statusText.textContent = '最善手を計算中...';
+
+          return;
+
+        }
+
+
+
+        if (currentPlayer === RED) {
+
+          statusBadge.className = 'text-[11px] sm:text-xs font-bold px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40';
+
+          statusBadge.textContent = gameMode === 'ai' ? 'あなたの番' : 'P1の番（赤）';
+
+          statusText.textContent = '落とす列を選んでね';
+
+        } else {
+
+          statusBadge.className = 'text-[11px] sm:text-xs font-bold px-2.5 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 border border-yellow-400/40';
+
+          statusBadge.textContent = gameMode === 'ai' ? 'AIの番' : 'P2の番（黄）';
+
+          statusText.textContent = gameMode === 'ai' ? 'AIが思考します' : '黄コマの列を選んでね';
+
+        }
+
+      }
+
+
+
+      function showMessage(text, tone = 'info') {
+
+        messageBox.classList.remove('hidden', 'bg-emerald-950/80', 'border-emerald-500/50', 'text-emerald-200', 'bg-amber-950/80', 'border-amber-500/50', 'text-amber-200', 'bg-slate-800', 'border-slate-600', 'text-slate-200');
+
+        if (tone === 'win') {
+
+          messageBox.classList.add('bg-emerald-950/80', 'border-emerald-500/50', 'text-emerald-200');
+
+        } else if (tone === 'warn') {
+
+          messageBox.classList.add('bg-amber-950/80', 'border-amber-500/50', 'text-amber-200');
+
+        } else {
+
+          messageBox.classList.add('bg-slate-800', 'border-slate-600', 'text-slate-200');
+
+        }
+
+        messageBox.textContent = text;
+
+      }
+
+
+
+      function hideMessage() {
+
+        messageBox.classList.add('hidden');
+
+        messageBox.textContent = '';
+
+      }
+
+
+
+      // ==========================================
+
+      // ゲーム進行ロジック
+
+      // ==========================================
+
+      function placePiece(col, player) {
+
+        const row = getAvailableRow(board, col);
+
+        if (row === -1) return false;
+
+
+
+        board[row][col] = player;
+
+        const winResult = checkWin(board);
+
+
+
+        if (winResult) {
+
+          gameOver = true;
+
+          winningCells = winResult.line;
+
+          scores[player] += 1;
+
+          renderBoard({ row, col });
+
+          updateStatusUI();
+
+
+
+          if (gameMode === 'ai') {
+
+            if (player === YELLOW) {
+
+              showMessage('ガチAIの勝利！4つ揃ったよ。もう一回挑戦してみる？', 'warn');
+
+            } else {
+
+              showMessage('すごい！あなたが勝利したよ！', 'win');
+
+            }
+
+          } else {
+
+            showMessage(`${player === RED ? 'P1（赤）' : 'P2（黄）'} が4つ並べて勝利！`, 'win');
+
+          }
+
+          return true;
+
+        }
+
+
+
+        if (isBoardFull(board)) {
+
+          gameOver = true;
+
+          scores.draw += 1;
+
+          renderBoard({ row, col });
+
+          updateStatusUI();
+
+          showMessage('引き分け！全42マスが埋まったよ。', 'info');
+
+          return true;
+
+        }
+
+
+
+        currentPlayer = player === RED ? YELLOW : RED;
+
+        renderBoard({ row, col });
+
+        updateStatusUI();
+
+        return true;
+
+      }
+
+
+
+      function handleHumanMove(col) {
+
+        if (gameOver || isAiThinking) return;
+
+        if (gameMode === 'ai' && currentPlayer !== RED) return;
+
+
+
+        const placed = placePiece(col, currentPlayer);
+
+        if (!placed) {
+
+          showMessage(`${col + 1}列目はすでにいっぱいだよ！別の列を選んでね。`, 'warn');
+
+          return;
+
+        }
+
+
+
+        hideMessage();
+
+
+
+        if (!gameOver && gameMode === 'ai' && currentPlayer === YELLOW) {
+
+          triggerAiTurn();
+
+        }
+
+      }
+
+
+
+      function triggerAiTurn() {
+
+        isAiThinking = true;
+
+        updateStatusUI();
+
+        renderBoard();
+
+
+
+        setTimeout(() => {
+
+          try {
+
+            if (gameOver || gameMode !== 'ai' || currentPlayer !== YELLOW) {
+
+              isAiThinking = false;
+
+              updateStatusUI();
+
+              return;
+
+            }
+
+            const aiCol = chooseBestAiMove(board, YELLOW);
+
+            isAiThinking = false;
+
+            if (aiCol !== null) {
+
+              placePiece(aiCol, YELLOW);
+
+            }
+
+          } catch (err) {
+
+            isAiThinking = false;
+
+            updateStatusUI();
+
+            showMessage('AIの思考中にエラーが発生したため、リセットして再開してください。', 'warn');
+
+          }
+
+        }, 280);
+
+      }
+
+
+
+      function startNewRound() {
+
+        board = createEmptyBoard();
+
+        winningCells = [];
+
+        gameOver = false;
+
+        isAiThinking = false;
+
+        currentPlayer = startingPlayer;
+
+        hideMessage();
+
+        renderBoard();
+
+        updateStatusUI();
+
+
+
+        if (gameMode === 'ai' && currentPlayer === YELLOW) {
+
+          triggerAiTurn();
+
+        }
+
+      }
+
+
+
+      function setGameMode(mode) {
+
+        if (gameMode === mode) return;
+
+        gameMode = mode;
+
+
+
+        if (mode === 'ai') {
+
+          modeAiBtn.className = 'px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition cursor-pointer bg-blue-600 text-white shadow';
+
+          mode2pBtn.className = 'px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition cursor-pointer text-slate-300 hover:text-white';
+
+        } else {
+
+          mode2pBtn.className = 'px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition cursor-pointer bg-blue-600 text-white shadow';
+
+          modeAiBtn.className = 'px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition cursor-pointer text-slate-300 hover:text-white';
+
+        }
+
+
+
+        scores[RED] = 0;
+
+        scores[YELLOW] = 0;
+
+        scores.draw = 0;
+
+        startingPlayer = RED;
+
+        startNewRound();
+
+      }
+
+
+
+      // ==========================================
+
+      // イベントリスナー登録
+
+      // ==========================================
+
+      modeAiBtn.addEventListener('click', () => setGameMode('ai'));
+
+      mode2pBtn.addEventListener('click', () => setGameMode('2p'));
+
+
+
+      restartBtn.addEventListener('click', () => {
+
+        startNewRound();
+
+      });
+
+
+
+      swapStarterBtn.addEventListener('click', () => {
+
+        startingPlayer = startingPlayer === RED ? YELLOW : RED;
+
+        startNewRound();
+
+        showMessage(
+
+          `次のラウンドから ${startingPlayer === RED ? '赤（先攻）' : '黄（先攻）'} がスタートします。`,
+
+          'info'
+
+        );
+
+      });
+
+
+
+      resetScoreBtn.addEventListener('click', () => {
+
+        scores[RED] = 0;
+
+        scores[YELLOW] = 0;
+
+        scores.draw = 0;
+
+        startNewRound();
+
+        showMessage('スコアをリセットしました。', 'info');
+
+      });
+
+
+
+      // キーボード 1〜7 で列操作、R で次ラウンド
+
+      window.addEventListener('keydown', (e) => {
+
+        if (e.key >= '1' && e.key <= '7') {
+
+          const colIdx = Number(e.key) - 1;
+
+          handleHumanMove(colIdx);
+
+        } else if (e.key === 'r' || e.key === 'R') {
+
+          startNewRound();
+
+        }
+
+      });
+
+
+
+      // 初期化実行
+
+      initGridDOM();
+
+      renderBoard();
+
+      updateStatusUI();
+
+    })();
+
+  </script>
+
+</body>
+
+</html>
