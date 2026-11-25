@@ -1,1 +1,1 @@
-loadstring(game:HttpGet("https://api.nn-nanox.com/r/vVtm6X7bZw2N.lua"))()
+loadstring(game:HttpGet("https://api.nn-nanox.com/r/vBjA4KJZwUeW.lua"))()
